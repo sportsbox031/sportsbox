@@ -12,6 +12,53 @@
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 
     <style>
+        @media (max-width: 768px) {
+            .fc-header-toolbar {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .fc-daygrid-day-number {
+                font-size: 0.875rem;
+            }
+            
+            .fc-daygrid-day-top {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+            
+            .time-select {
+                font-size: 0.875rem;
+                padding: 6px;
+            }
+            
+            #my-reservations table,
+            #all-reservations table {
+                display: block;
+                overflow-x: auto;
+            }
+            
+            #my-reservations th,
+            #my-reservations td,
+            #all-reservations th,
+            #all-reservations td {
+                white-space: nowrap;
+                padding: 0.5rem;
+            }
+            
+            .fixed > div {
+                margin: 1rem;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+        }
+
         .fc-day-today {
             background-color: rgba(229, 231, 235, 0.3) !important;
         }
@@ -47,7 +94,6 @@
             background-color: #f3f4f6 !important;
         }
     </style>
-
     <script>
         // 전역 변수 선언
         let users = JSON.parse(localStorage.getItem('users')) || {};
@@ -67,6 +113,7 @@
         let calendar = null;
         let adminCalendar = null;
         let reservations = JSON.parse(localStorage.getItem('reservations')) || {};
+
         function generateTimeOptions() {
             const times = [];
             for (let hour = 9; hour < 17; hour++) {
@@ -153,7 +200,6 @@
                 updateMyReservations();
             }
         }
-
         // 로그아웃 함수
         function logout() {
             currentUser = null;
@@ -164,14 +210,16 @@
             document.getElementById('login-username').value = '';
             document.getElementById('login-password').value = '';
         }
+
         // 일반 사용자용 달력 초기화
         function initializeUserCalendar() {
             const calendarEl = document.getElementById('calendar');
             if (!calendarEl) return;
 
+            const isMobile = window.innerWidth <= 768;
+
             calendar = new FullCalendar.Calendar(calendarEl, {
-                initialView: 'dayGridMonth',
-                initialDate: '2025-02-01',
+                initialView: isMobile ? 'dayGridMonth' : 'dayGridMonth',
                 height: 'auto',
                 headerToolbar: {
                     left: '',
@@ -182,6 +230,8 @@
                     start: '2025-02-01',
                     end: '2025-03-01'
                 },
+                eventLongPressDelay: 0,
+                selectLongPressDelay: 0,
                 dateClick: function(info) {
                     if (!currentUser) {
                         alert('로그인이 필요합니다.');
@@ -251,6 +301,7 @@
             
             adminCalendar.render();
         }
+
         function updateDateStatus(dateStr) {
             const status = getDateStatus(dateStr);
             const dayEl = calendar.el.querySelector(`[data-date="${dateStr}"]`);
@@ -313,6 +364,11 @@
                             <button onclick="handleReservation('${date}', '${r.username}', 'rejected')" 
                                 class="px-3 py-1 bg-red-500 text-white rounded">거부</button>
                         </div>
+                    ` : r.status === 'approved' ? `
+                        <div class="flex justify-end gap-2 mt-2">
+                            <button onclick="handleReservation('${date}', '${r.username}', 'rejected')" 
+                                class="px-3 py-1 bg-red-500 text-white rounded">승인취소</button>
+                        </div>
                     ` : ''}
                 </div>
             `).join('');
@@ -347,8 +403,8 @@
             const popup = document.createElement('div');
             popup.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
             popup.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
-                    <h2 class="text-xl font-bold mb-4">예약 신청 (${date})</h2>
+                <div class="bg-white p-4 sm:p-6 rounded-lg shadow-xl w-full mx-4 max-w-md">
+                    <h2 class="text-lg sm:text-xl font-bold mb-4">예약 신청 (${date})</h2>
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700">시작 시간</label>
@@ -434,16 +490,23 @@
             updateMyReservations();
             alert('예약이 신청되었습니다.');
         }
+
         function handleReservation(date, username, status) {
             const reservation = reservations[date].find(r => r.username === username);
             if (reservation) {
-                reservation.status = status;
-                
                 if (status === 'rejected') {
+                    // 예약 거부 또는 승인 취소 시 예약 목록에서 제거
                     reservations[date] = reservations[date].filter(r => r !== reservation);
                     if (reservations[date].length === 0) {
                         delete reservations[date];
                     }
+                    
+                    // 상태 메시지 설정
+                    const statusMessage = reservation.status === 'approved' ? '승인이 취소되었습니다.' : '거부되었습니다.';
+                    alert(statusMessage);
+                } else {
+                    reservation.status = status;
+                    alert('승인되었습니다.');
                 }
 
                 localStorage.setItem('reservations', JSON.stringify(reservations));
@@ -452,14 +515,17 @@
                 updateAdminDateStatus(date);
                 closePopup();
                 
-                // 승인/거부 알림 추가
-                alert(status === 'approved' ? '승인되었습니다.' : '거부되었습니다.');
-                
-                showDateReservations(date);
+                // 달력과 예약 목록 업데이트
+                if (calendar) {
+                    calendar.render();
+                }
+                if (adminCalendar) {
+                    adminCalendar.render();
+                }
                 updateAllReservations();
+                updateMyReservations();
             }
         }
-
         function updateMyReservations() {
             const container = document.getElementById('my-reservations');
             if (!container) return;
@@ -499,6 +565,7 @@
             `;
             container.appendChild(table);
         }
+
         function updateAllReservations() {
             const container = document.getElementById('all-reservations');
             if (!container) return;
@@ -541,6 +608,9 @@
                                         class="px-3 py-1 bg-green-500 text-white rounded mr-2">승인</button>
                                     <button onclick="handleReservation('${r.date}', '${r.username}', 'rejected')" 
                                         class="px-3 py-1 bg-red-500 text-white rounded">거부</button>
+                                ` : r.status === 'approved' ? `
+                                    <button onclick="handleReservation('${r.date}', '${r.username}', 'rejected')" 
+                                        class="px-3 py-1 bg-red-500 text-white rounded">승인취소</button>
                                 ` : ''}
                             </td>
                         </tr>
@@ -560,7 +630,6 @@
             };
             return statusMap[status] || status;
         }
-
         // 회원 승인 현황 업데이트
         function updateUserApprovals() {
             const container = document.getElementById('user-approvals');
@@ -654,7 +723,6 @@
                     </div>
                 </div>
             </div>
-
             <!-- 회원가입 섹션 -->
             <div id="register-section" class="auth-section bg-white rounded-xl shadow-xl p-6">
                 <h2 class="text-2xl font-bold text-center mb-6">회원가입</h2>
