@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스포츠박스 예약시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .calendar-day:hover {
+            background-color: rgba(59, 130, 246, 0.1);
+            transition: all 0.3s;
+        }
+        .selected {
+            background-color: #3B82F6 !important;
+            color: white !important;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .modal.show {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- 로그인 화면 -->
+    <div id="loginScreen" class="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+            <h1 class="text-2xl font-bold mb-6 text-center">스포츠박스 로그인</h1>
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">아이디</label>
+                    <input type="text" id="username" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">비밀번호</label>
+                    <input type="password" id="password" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+                <button type="submit" 
+                    class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition duration-200">
+                    로그인
+                </button>
+            </form>
+            <button id="showSignup" 
+                class="w-full mt-4 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition duration-200">
+                회원가입
+            </button>
+        </div>
+    </div>
+
+    <!-- 회원가입 모달 -->
+    <div id="signupModal" class="modal">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96 m-auto">
+            <h2 class="text-2xl font-bold mb-6 text-center">회원가입</h2>
+            <form id="signupForm" class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">단체명</label>
+                    <input type="text" id="groupName" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">비밀번호</label>
+                    <input type="password" id="signupPassword" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">담당자</label>
+                    <input type="text" id="manager" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">연락처</label>
+                    <input type="text" id="contact" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                </div>
+                <button type="submit" 
+                    class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition duration-200">
+                    가입하기
+                </button>
+                <button type="button" id="closeSignup"
+                    class="w-full bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition duration-200">
+                    닫기
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 사용자 대시보드 -->
+    <div id="userDashboard" class="hidden">
+        <nav class="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-running text-2xl"></i>
+                        <span class="text-2xl font-bold">스포츠박스</span>
+                    </div>
+                    <div class="flex space-x-8">
+                        <button id="logoutBtn" class="hover:text-blue-200 transition-colors duration-200 flex items-center space-x-1">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>로그아웃</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="container mx-auto px-4 py-8">
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- 캘린더 섹션 -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold text-gray-700">예약 현황</h2>
+                        <div class="flex space-x-4">
+                            <button id="prevMonth" class="p-2 hover:bg-blue-100 rounded-full transition-colors duration-200">
+                                <i class="fas fa-chevron-left text-blue-600"></i>
+                            </button>
+                            <span id="currentMonth" class="p-2 font-medium text-gray-700"></span>
+                            <button id="nextMonth" class="p-2 hover:bg-blue-100 rounded-full transition-colors duration-200">
+                                <i class="fas fa-chevron-right text-blue-600"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 gap-2 mb-2">
+                        <div class="text-center font-medium text-gray-600">일</div>
+                        <div class="text-center font-medium text-gray-600">월</div>
+                        <div class="text-center font-medium text-gray-600">화</div>
+                        <div class="text-center font-medium text-gray-600">수</div>
+                        <div class="text-center font-medium text-gray-600">목</div>
+                        <div class="text-center font-medium text-gray-600">금</div>
+                        <div class="text-center font-medium text-gray-600">토</div>
+                    </div>
+                    <div id="calendar" class="grid grid-cols-7 gap-2"></div>
+                </div>
+
+                <!-- 예약 정보 섹션 -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h2 class="text-xl font-bold text-gray-700 mb-6">예약하기</h2>
+                    <form id="bookingForm" class="space-y-6">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">선택된 날짜</label>
+                            <input type="text" id="selectedDate" readonly 
+                                class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">시작 시간</label>
+                                <select id="startTime" 
+                                    class="w-full p-3 border border-gray-300 rounded-lg">
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">종료 시간</label>
+                                <select id="endTime" 
+                                    class="w-full p-3 border border-gray-300 rounded-lg">
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" 
+                            class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition duration-200">
+                            예약하기
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 내 예약 목록 -->
+            <div class="mt-8 bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold text-gray-700 mb-6">내 예약 목록</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    날짜
+                                </th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    시간
+                                </th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    상태
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="bookingsList" class="bg-white divide-y divide-gray-200">
+                            <!-- 예약 목록이 여기에 동적으로 추가됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 관리자 대시보드 -->
+    <div id="adminDashboard" class="hidden">
+        <nav class="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-running text-2xl"></i>
+                        <span class="text-2xl font-bold">스포츠박스 관리자</span>
+                    </div>
+                    <div class="flex space-x-8">
+                        <button id="adminLogoutBtn" class="hover:text-blue-200 transition-colors duration-200 flex items-center space-x-1">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>로그아웃</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="container mx-auto px-4 py-8">
+            <!-- 회원가입 승인 목록 -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                <h2 class="text-xl font-bold text-gray-700 mb-6">회원가입 승인 대기</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    단체명
+                                </th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    담당자
+                                </th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    연락처
+                                </th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    관리
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingUsersList" class="bg-white divide-y divide-gray-200">
+                            <!-- 승인 대기 목록이 여기에 동적으로 추가됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 예약 승인 목록 -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold text-gray-700 mb-6">예약 승인 대기</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    단체명
+                                </th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    날짜
+                                </th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    시간
+                                </th>
+                                <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    관리
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingBookingsList" class="bg-white divide-y divide-gray-200">
+                            <!-- 예약 승인 대기 목록이 여기에 동적으로 추가됨 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+const API_BASE_URL = 'https://
+sports-box-api.sportsbox031.workers.dev';
+
+        // Socket.io 연결
+        const socket = io('http://
+sports-box-api.sportsbox031.workers.dev');
+withCredentials: true,
+            transports: ['websocket'],
+            timeout: 10000,
+            reconnection: true,
+            reconnectionAttempts: 5
+        });
+
+        let currentUser = null;
+        
+        // 페이지 로드 시 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            // 로그인 폼 이벤트 리스너
+            document.getElementById('loginForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                
+                try {
+                    const response = await fetch(`${http://
+sports-box-api.sportsbox031.workers.dev}/api/login, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'include', 
+                        body: JSON.stringify({ username, password }),
+                    });
+                    
+                    const data = await response.json();
+                    if (response.ok) {
+                        localStorage.setItem('token', data.token);
+                        currentUser = { role: data.role };
+                        showDashboard(data.role);
+                    } else {
+                        alert(data.message);
+                    }
+                } catch (error) {
+                    alert('로그인 중 오류가 발생했습니다.');
+                }
+            });
+
+            // 회원가입 모달 이벤트 리스너
+            document.getElementById('showSignup').addEventListener('click', function() {
+                document.getElementById('signupModal').classList.add('show');
+            });
+
+            document.getElementById('closeSignup').addEventListener('click', function() {
+                document.getElementById('signupModal').classList.remove('show');
+            });
+
+            document.getElementById('signupForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const formData = {
+                    groupName: document.getElementById('groupName').value,
+                    password: document.getElementById('signupPassword').value,
+                    manager: document.getElementById('manager').value,
+                    contact: document.getElementById('contact').value,
+                };
+
+                try {
+                    const response = await fetch('http://localhost:5000/api/signup', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(formData),
+                    });
+                    
+                    const data = await response.json();
+                    alert(data.message);
+                    document.getElementById('signupModal').classList.remove('show');
+                } catch (error) {
+                    alert('회원가입 중 오류가 발생했습니다.');
+                }
+            });
+
+            // 로그아웃 이벤트 리스너
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+            document.getElementById('adminLogoutBtn').addEventListener('click', logout);
+
+            // 캘린더 초기화
+            initializeCalendar();
+            initializeTimeSelects();
+
+            // Socket.io 이벤트 리스너
+            socket.on('newSignup', function() {
+                if (currentUser?.role === 'admin') {
+                    loadPendingUsers();
+                }
+            });
+
+            socket.on('bookingCreated', function() {
+                loadBookings();
+            });
+        });
+
+        function showDashboard(role) {
+            document.getElementById('loginScreen').classList.add('hidden');
+            if (role === 'admin') {
+                document.getElementById('adminDashboard').classList.remove('hidden');
+                loadPendingUsers();
+                loadPendingBookings();
+            } else {
+                document.getElementById('userDashboard').classList.remove('hidden');
+                loadBookings();
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            currentUser = null;
+            document.getElementById('adminDashboard').classList.add('hidden');
+            document.getElementById('userDashboard').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+        }
+
+        // 캘린더 관련 함수들
+        let currentDate = new Date();
+        
+        function initializeCalendar() {
+            const calendar = document.getElementById('calendar');
+            const currentMonthElement = document.getElementById('currentMonth');
+            const selectedDateInput = document.getElementById('selectedDate');
+            
+            function renderCalendar(date) {
+                const year = date.getFullYear();
+                const month = date.getMonth();
+                
+                currentMonthElement.textContent = `${year}년 ${month + 1}월`;
+                
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                
+                calendar.innerHTML = '';
+                
+                // 첫째 날의 요일만큼 빈 칸 추가
+                for (let i = 0; i < firstDay.getDay(); i++) {
+                    const emptyDay = document.createElement('div');
+                    emptyDay.className = 'h-12 rounded-lg';
+                    calendar.appendChild(emptyDay);
+                }
+                
+                // 날짜 채우기
+                for (let day = 1; day <= lastDay.getDate(); day++) {
+                    const dayElement = document.createElement('div');
+                    dayElement.className = 'calendar-day h-12 flex items-center justify-center cursor-pointer rounded-lg hover:bg-blue-100 transition-colors text-gray-700';
+                    dayElement.textContent = day;
+                    
+                    const today = new Date();
+                    if (day === today.getDate() && 
+                        currentDate.getMonth() === today.getMonth() && 
+                        currentDate.getFullYear() === today.getFullYear()) {
+                        dayElement.classList.add('bg-blue-100', 'font-bold');
+                    }
+                    
+                    dayElement.addEventListener('click', function() {
+                        const selected = calendar.querySelector('.selected');
+                        if (selected) {
+                            selected.classList.remove('selected');
+                        }
+                        dayElement.classList.add('selected');
+                        
+                        const selectedDate = new Date(year, month, day);
+                        selectedDateInput.value = `${year}년 ${month + 1}월 ${day}일`;
+                    });
+                    
+                    calendar.appendChild(dayElement);
+                }
+            }
+
+            document.getElementById('prevMonth').addEventListener('click', function() {
+                currentDate.setMonth(currentDate.getMonth() - 1);
+                renderCalendar(currentDate);
+            });
+
+            document.getElementById('nextMonth').addEventListener('click', function() {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                renderCalendar(currentDate);
+            });
+
+            renderCalendar(currentDate);
+        }
+
+        // 시간 선택 초기화
+        function initializeTimeSelects() {
+            const startTimeSelect = document.getElementById('startTime');
+            const endTimeSelect = document.getElementById('endTime');
+            
+            function generateTimeOptions() {
+                const times = [];
+                for (let hour = 9; hour < 18; hour++) {
+                    for (let minute = 0; minute < 60; minute += 30) {
+                        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                        times.push(timeString);
+                    }
+                }
+                return times;
+            }
+
+            const timeOptions = generateTimeOptions();
+            startTimeSelect.innerHTML = '<option value="">선택해주세요</option>' + 
+                timeOptions.map(time => `<option value="${time}">${time}</option>`).join('');
+
+            startTimeSelect.addEventListener('change', function() {
+                const selectedIndex = timeOptions.indexOf(this.value);
+                endTimeSelect.innerHTML = '<option value="">선택해주세요</option>' + 
+                    timeOptions.slice(selectedIndex + 1).map(time => `<option value="${time}">${time}</option>`).join('');
+            });
+        }
+
+        // API 호출 함수들
+        async function loadPendingUsers() {
+            try {
+                const response = await fetch('http://localhost:5000/api/admin/pending-users', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                const users = await response.json();
+                renderPendingUsers(users);
+            } catch (error) {
+                console.error('Failed to load pending users:', error);
+            }
+        }
+
+        async function loadPendingBookings() {
+            try {
+                const response = await fetch('http://localhost:5000/api/admin/pending-bookings', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                const bookings = await response.json();
+                renderPendingBookings(bookings);
+            } catch (error) {
+                console.error('Failed to load pending bookings:', error);
+            }
+        }
+
+        async function loadBookings() {
+            try {
+                const response = await fetch('http://localhost:5000/api/bookings', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                const bookings = await response.json();
+                renderBookings(bookings);
+            } catch (error) {
+                console.error('Failed to load bookings:', error);
+            }
+        }
+
+        // 렌더링 함수들
+        function renderPendingUsers(users) {
+            const tbody = document.getElementById('pendingUsersList');
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">${user.groupName}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${user.manager}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${user.contact}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <button onclick="approveUser(${user.id})" 
+                            class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition duration-200">
+                            승인
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderPendingBookings(bookings) {
+            const tbody = document.getElementById('pendingBookingsList');
+            tbody.innerHTML = bookings.map(booking => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">${booking.groupName}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${booking.date}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${booking.startTime} - ${booking.endTime}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <button onclick="approveBooking(${booking.id})" 
+                            class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition duration-200">
+                            승인
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderBookings(bookings) {
+            const tbody = document.getElementById('bookingsList');
+            tbody.innerHTML = bookings.map(booking => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap">${booking.date}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${booking.startTime} - ${booking.endTime}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                            ${booking.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                              booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                              'bg-red-100 text-red-800'}">
+                            ${booking.status === 'approved' ? '승인됨' : 
+                              booking.status === 'pending' ? '대기중' : '거절됨'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 관리자 기능
+        async function approveUser(userId) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/admin/users/${userId}/approve`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                const data = await response.json();
+                alert(data.message);
+                loadPendingUsers();
+            } catch (error) {
+                alert('사용자 승인 중 오류가 발생했습니다.');
+            }
+        }
+
+        async function approveBooking(bookingId) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/admin/bookings/${bookingId}/approve`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                const data = await response.json();
+                alert(data.message);
+                loadPending async function approveBooking(bookingId) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/admin/bookings/${bookingId}/approve`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                const data = await response.json();
+                alert(data.message);
+                loadPendingBookings();
+            } catch (error) {
+                alert('예약 승인 중 오류가 발생했습니다.');
+            }
+        }
+
+        // 예약 신청
+        document.getElementById('bookingForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const selectedDate = document.getElementById('selectedDate').value;
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+
+            if (!selectedDate || !startTime || !endTime) {
+                alert('모든 필드를 입력해주세요.');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/api/bookings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        date: selectedDate,
+                        startTime,
+                        endTime
+                    })
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    alert('예약이 신청되었습니다.');
+                    loadBookings();
+                } else {
+                    alert(data.message);
+                }
+            } catch (error) {
+                alert('예약 신청 중 오류가 발생했습니다.');
+            }
+        });
+
+        // 에러 처리 함수
+        function handleError(error) {
+            console.error('Error:', error);
+            if (error.response) {
+                // 서버에서 응답이 왔지만 에러인 경우
+                alert(error.response.data.message || '오류가 발생했습니다.');
+            } else if (error.request) {
+                // 서버에서 응답이 없는 경우
+                alert('서버와 통신할 수 없습니다. 네트워크 연결을 확인해주세요.');
+            } else {
+                // 요청 설정 중 에러가 발생한 경우
+                alert('요청을 처리할 수 없습니다.');
+            }
+        }
+
+        // 토큰 검증 및 자동 로그인
+        async function validateToken() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            try {
+                const response = await fetch('http://localhost:5000/api/validate-token', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    currentUser = { role: data.role };
+                    showDashboard(data.role);
+                } else {
+                    localStorage.removeItem('token');
+                }
+            } catch (error) {
+                localStorage.removeItem('token');
+                handleError(error);
+            }
+        }
+
+        // 날짜 포맷팅 헬퍼 함수
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}년 ${month}월 ${day}일`;
+        }
+
+        // 초기화
+        validateToken();
+    </script>
+</body>
+</html>
